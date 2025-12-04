@@ -1,579 +1,819 @@
-# Kịch Bản Kiểm Thử Chi Tiết - Hệ Thống Phát Hiện Bệnh Lúa
+# KỊCH BẢN KIỂM THỬ HỆ THỐNG
 
-## Mục Tiêu Kiểm Thử
+## Hệ Thống Phát Hiện Bệnh Lúa Sử Dụng Deep Learning Trên Jetson Nano
 
-Đánh giá toàn diện hiệu năng hệ thống AI phát hiện bệnh lúa trên Jetson Nano, bao gồm:
-- Thời gian xử lý từng giai đoạn
-- Hiệu suất GPU/CPU
-- Độ chính xác dự đoán
-- Throughput (số ảnh/giây)
-- Tài nguyên hệ thống (nhiệt độ, công suất)
+---
 
-## Môi Trường Kiểm Thử
+## PHẦN I: TỔNG QUAN
 
-### Phần Cứng
-- **Thiết bị:** NVIDIA Jetson Nano Developer Kit
-- **CPU:** Quad-core ARM A57 @ 1.43 GHz
-- **GPU:** 128-core Maxwell
-- **RAM:** 4GB LPDDR4
-- **Storage:** 32GB+ SD Card
+### 1.1. Mục Đích Kiểm Thử
 
-### Phần Mềm
-- **OS:** Ubuntu 18.04 (L4T)
-- **CUDA:** 10.2.300
-- **TensorRT:** 8.2.1.8
-- **Python:** 3.6.9
-- **Framework:** TensorFlow/TensorRT
+Đánh giá toàn diện hiệu năng và độ tin cậy của hệ thống phát hiện bệnh lúa triển khai trên nền tảng NVIDIA Jetson Nano, bao gồm:
 
-### Mạng
-- **Kết nối:** WiFi/Ethernet
-- **Firebase Region:** asia-southeast1
-- **Băng thông:** Tối thiểu 10 Mbps
+1. **Hiệu năng xử lý:** Đo lường thời gian xử lý từng giai đoạn trong pipeline
+2. **Tài nguyên hệ thống:** Giám sát CPU, GPU, bộ nhớ, nhiệt độ, công suất
+3. **Độ tin cậy:** Đánh giá tỷ lệ thành công và xử lý lỗi
+4. **Throughput:** Đo lường số lượng ảnh xử lý được trong một đơn vị thời gian
+5. **Khả năng mở rộng:** Kiểm tra hiệu năng với khối lượng dữ liệu khác nhau
 
-## Chuẩn Bị Dữ Liệu
+### 1.2. Phạm Vi Kiểm Thử
 
-### Bộ Dữ Liệu Test
+**Các thành phần được kiểm thử:**
+- Module upload ảnh lên Firebase Storage
+- Module download ảnh từ Firebase Storage
+- Module tiền xử lý ảnh (preprocessing)
+- Module suy luận AI (inference) sử dụng TensorRT
+- Module hậu xử lý (postprocessing)
+- Hệ thống giám sát hiệu năng (performance monitoring)
+
+**Không thuộc phạm vi:**
+- Kiểm thử độ chính xác mô hình AI (accuracy testing)
+- Kiểm thử bảo mật (security testing)
+- Kiểm thử giao diện người dùng (UI testing)
+
+### 1.3. Tiêu Chí Chấp Nhận
+
+| Chỉ Số | Mục Tiêu | Chấp Nhận Được | Không Đạt |
+|--------|----------|----------------|-----------|
+| Thời gian inference | < 150ms | 150-200ms | > 200ms |
+| Thời gian E2E | < 2500ms | 2500-3500ms | > 3500ms |
+| Tỷ lệ thành công | 100% | ≥ 95% | < 95% |
+| Sử dụng GPU | 75-85% | 70-90% | < 70% hoặc > 95% |
+| Nhiệt độ CPU/GPU | < 60°C | 60-70°C | > 70°C |
+| Throughput (E2E) | > 0.5 FPS | 0.3-0.5 FPS | < 0.3 FPS |
+
+---
+
+## PHẦN II: MÔI TRƯỜNG KIỂM THỬ
+
+### 2.1. Cấu Hình Phần Cứng
+
+**Thiết bị chính:**
+```
+Tên thiết bị: NVIDIA Jetson Nano Developer Kit
+CPU: Quad-core ARM Cortex-A57 @ 1.43 GHz
+GPU: 128-core NVIDIA Maxwell
+RAM: 4GB 64-bit LPDDR4 @ 1600 MHz
+Storage: 32GB microSD (Class 10, UHS-I)
+Nguồn: 5V/4A DC
+```
+
+**Thiết bị phụ:**
+```
+Máy tính phát triển: Windows 11
+Kết nối mạng: WiFi 802.11ac / Ethernet Gigabit
+Router: Băng thông tối thiểu 50 Mbps
+```
+
+### 2.2. Cấu Hình Phần Mềm
+
+**Hệ điều hành và framework:**
+```
+OS: Ubuntu 18.04.6 LTS (L4T R32.7.1)
+Kernel: Linux 4.9.337-tegra
+Python: 3.6.9
+CUDA: 10.2.300
+cuDNN: 8.2.1
+TensorRT: 8.2.1.8
+OpenCV: 4.5.3
+```
+
+**Thư viện Python:**
+```
+tensorflow: 2.7.0
+numpy: 1.19.5
+firebase-admin: 5.2.0
+psutil: 5.9.0
+jetson-stats: 4.2.0
+```
+
+### 2.3. Dịch Vụ Cloud
+
+```
+Platform: Google Firebase
+Project ID: rice-813b5
+Region: asia-southeast1
+Storage: Firebase Storage
+Database: Firebase Realtime Database
+```
+
+### 2.4. Bộ Dữ Liệu Kiểm Thử
+
+**Thông tin chung:**
 ```
 Tổng số ảnh: 264 ảnh
-├── Brown Spot: 88 ảnh
-├── Healthy: 88 ảnh
-└── Leaf Blast: 88 ảnh
-
-Định dạng: JPG
-Kích thước: 640x480 - 1920x1080
-Dung lượng: 100KB - 2MB/ảnh
+Nguồn: Bộ dữ liệu validation
+Định dạng: JPEG
+Độ phân giải: 640x480 đến 1920x1080 pixels
+Kích thước file: 100KB - 2MB
 ```
 
-### Vị Trí Dữ Liệu
+**Phân bố theo lớp:**
+```
+├── Brown Spot (Đốm nâu): 88 ảnh (33.3%)
+├── Healthy (Khỏe mạnh): 88 ảnh (33.3%)
+└── Leaf Blast (Đạo ôn lá): 88 ảnh (33.3%)
+```
+
+**Vị trí lưu trữ:**
+```
+Đường dẫn: ~/rice_disease/web/test_images/
+Cấu trúc:
+├── brown_val (1).jpg đến brown_val (88).jpg
+├── healthy_val (1).jpg đến healthy_val (88).jpg
+└── leaf_blast_val (1).jpg đến leaf_blast_val (88).jpg
+```
+
+---
+
+## PHẦN III: PHƯƠNG PHÁP KIỂM THỬ
+
+### 3.1. Công Cụ Kiểm Thử
+
+**Script kiểm thử chính:**
 ```bash
-Jetson Nano: ~/rice_disease/web/test_images/
-├── brown_val (1).jpg
-├── brown_val (2).jpg
-├── ...
-├── healthy_val (1).jpg
-├── ...
-└── leaf_blast_val (1).jpg
+run_complete_test.py
 ```
 
-## Kịch Bản Test
+**Chức năng:**
+- Tự động khởi tạo Firebase connection
+- Khởi động performance monitoring
+- Chạy prediction listener ở background
+- Upload và xử lý ảnh tuần tự
+- Thu thập metrics chi tiết
+- Tạo báo cáo tổng hợp
 
-### Test Case 1: Kiểm Thử Đơn Lẻ (Single Image Test)
+**Module hỗ trợ:**
+```
+performance_monitor.py: Thu thập metrics hệ thống
+predict_listener_monitored.py: Xử lý prediction với monitoring
+predict_with_monitoring.py: Test local không qua Firebase
+```
 
-**Mục đích:** Xác minh hệ thống hoạt động đúng với 1 ảnh
+### 3.2. Metrics Thu Thập
+
+**Timing Metrics (đơn vị: milliseconds):**
+
+1. `t_upload`: Thời gian upload ảnh lên Firebase Storage
+2. `t_download`: Thời gian download ảnh từ Firebase Storage
+3. `t_load`: Thời gian load ảnh vào memory
+4. `t_preprocess`: Thời gian tiền xử lý ảnh
+5. `t_inference`: Thời gian suy luận AI
+6. `t_postprocess`: Thời gian hậu xử lý
+7. `t_e2e`: Tổng thời gian end-to-end
+
+**System Metrics:**
+1. `cpu_usage`: Mức sử dụng CPU (%)
+2. `memory_usage`: Mức sử dụng RAM (%)
+3. `gpu_usage`: Mức sử dụng GPU (%)
+4. `gpu_freq`: Tần số GPU (MHz)
+5. `cpu_temp`: Nhiệt độ CPU (°C)
+6. `gpu_temp`: Nhiệt độ GPU (°C)
+7. `power`: Công suất tiêu thụ (W)
+
+**Performance Metrics:**
+1. `success_rate`: Tỷ lệ thành công (%)
+2. `throughput`: Số ảnh xử lý/giây (FPS)
+3. `latency_p50`: Độ trễ trung vị (ms)
+4. `latency_p95`: Độ trễ percentile 95 (ms)
+5. `latency_p99`: Độ trễ percentile 99 (ms)
+
+### 3.3. Công Thức Tính Toán
+
+**Thời gian End-to-End:**
+```
+t_e2e = t_upload + t_request + t_processing + t_parse
+```
+
+**Thời gian xử lý Jetson:**
+```
+t_jetson = t_download + t_load + t_preprocess + t_inference + t_postprocess
+```
+
+**Throughput:**
+```
+Throughput (FPS) = 1000 / t_average (ms)
+```
+
+**Tỷ lệ thành công:**
+```
+Success Rate (%) = (Số ảnh thành công / Tổng số ảnh) × 100
+```
+
+**Độ lệch chuẩn:**
+```
+σ = √(Σ(xi - μ)² / N)
+```
+
+---
+
+## PHẦN IV: CÁC KỊCH BẢN KIỂM THỬ
+
+### 4.1. Kịch Bản 1: Kiểm Thử Đơn Lẻ (Single Image Test)
+
+**Mục đích:** Xác minh hệ thống hoạt động đúng với một ảnh đơn lẻ
+
+**Điều kiện tiên quyết:**
+- Jetson Nano đã được cấu hình đầy đủ
+- Kết nối mạng ổn định
+- Firebase đã được khởi tạo
+- Có ít nhất 1 ảnh trong thư mục test
 
 **Các bước thực hiện:**
 
 ```bash
-# Bước 1: SSH vào Jetson
+# Bước 1: Kết nối SSH đến Jetson Nano
 ssh jetson@<JETSON_IP>
 
-# Bước 2: Di chuyển đến thư mục
+# Bước 2: Di chuyển đến thư mục làm việc
 cd ~/rice_disease/web
 
-# Bước 3: Chạy test đơn lẻ
+# Bước 3: Kiểm tra file ảnh test
+ls -lh test_images/ | head -5
+
+# Bước 4: Chạy kiểm thử với 1 ảnh
 python3 run_complete_test.py --folder ./test_images --max 1
 
-# Bước 4: Quan sát output
+# Bước 5: Kiểm tra kết quả
+cat complete_test_results.json | python3 -m json.tool
 ```
 
 **Kết quả mong đợi:**
-```
-✅ Upload thành công
-✅ Listener nhận và xử lý
-✅ Trả về kết quả dự đoán
-✅ Timing breakdown đầy đủ
-✅ Không có lỗi
-```
+- Hệ thống upload ảnh thành công
+- Listener nhận và xử lý request
+- Trả về kết quả dự đoán chính xác
+- Timing breakdown hiển thị đầy đủ
+- Không có lỗi trong quá trình xử lý
+- File kết quả được tạo: `complete_test_results.json`, `.csv`, `.txt`
 
-**Thời gian:** 2-3 phút
+**Thời gian thực hiện:** 2-3 phút
 
----
+**Tiêu chí đánh giá:**
+- ✅ Pass: Tất cả bước thực hiện thành công, có kết quả dự đoán
+- ❌ Fail: Có lỗi xảy ra hoặc không có kết quả
 
-### Test Case 2: Kiểm Thử Nhỏ (Small Batch Test)
 
-**Mục đích:** Kiểm tra tính ổn định với 10 ảnh
+### 4.2. Kịch Bản 2: Kiểm Thử Quy Mô Nhỏ (Small Batch Test)
+
+**Mục đích:** Đánh giá tính ổn định với 10 ảnh
+
+**Điều kiện tiên quyết:**
+- Kịch bản 1 đã pass
+- Có ít nhất 10 ảnh trong thư mục test
 
 **Các bước thực hiện:**
 
 ```bash
-# Chạy test 10 ảnh
+# Chạy test với 10 ảnh
 python3 run_complete_test.py --folder ./test_images --max 10
+
+# Quan sát metrics trong quá trình chạy
+# Kiểm tra nhiệt độ
+jtop
+
+# Sau khi hoàn thành, xem báo cáo
+cat test_summary_report.txt
 ```
 
-**Metrics cần thu thập:**
-- Thời gian trung bình/ảnh
-- Thời gian min/max
-- Success rate
-- CPU/GPU usage
-- Nhiệt độ CPU/GPU
+**Metrics cần ghi nhận:**
+
+| Metric | Giá Trị Đo Được | Ghi Chú |
+|--------|-----------------|---------|
+| Thời gian trung bình (ms) | _________ | |
+| Thời gian min (ms) | _________ | |
+| Thời gian max (ms) | _________ | |
+| Độ lệch chuẩn (ms) | _________ | |
+| Tỷ lệ thành công (%) | _________ | |
+| CPU usage trung bình (%) | _________ | |
+| GPU usage trung bình (%) | _________ | |
+| Nhiệt độ CPU max (°C) | _________ | |
+| Nhiệt độ GPU max (°C) | _________ | |
+| Công suất trung bình (W) | _________ | |
 
 **Kết quả mong đợi:**
-```
-Success Rate: 100%
-Average Time: 2000-3000ms
-Inference Time: 80-150ms
-GPU Usage: 70-90%
-Temperature: < 60°C
-```
+- Success rate: 100%
+- Thời gian trung bình: 2000-3000ms
+- Inference time: 80-150ms
+- GPU usage: 70-90%
+- Nhiệt độ: < 60°C
+- Không có thermal throttling
 
-**Thời gian:** 5-10 phút
+**Thời gian thực hiện:** 5-10 phút
 
----
+**Tiêu chí đánh giá:**
+- ✅ Pass: Success rate ≥ 90%, không có lỗi nghiêm trọng
+- ⚠️ Warning: Success rate 80-90%, có cảnh báo nhiệt độ
+- ❌ Fail: Success rate < 80% hoặc hệ thống crash
 
-### Test Case 3: Kiểm Thử Trung Bình (Medium Batch Test)
 
-**Mục đích:** Đánh giá hiệu năng với 50 ảnh
+### 4.3. Kịch Bản 3: Kiểm Thử Quy Mô Trung Bình (Medium Batch Test)
+
+**Mục đích:** Đánh giá hiệu năng chi tiết với 50 ảnh
+
+**Điều kiện tiên quyết:**
+- Kịch bản 2 đã pass
+- Jetson Nano đã nguội (nhiệt độ < 50°C)
 
 **Các bước thực hiện:**
 
 ```bash
+# Kiểm tra nhiệt độ trước khi test
+jtop
+
 # Chạy test 50 ảnh
 python3 run_complete_test.py --folder ./test_images --max 50
+
+# Trong quá trình chạy, mở terminal khác để monitor
+# Terminal 2:
+watch -n 1 'jtop --json | jq ".stats"'
 ```
 
-**Metrics cần thu thập:**
-- Timing breakdown chi tiết
-- Statistical analysis (mean, std, min, max)
-- System metrics over time
-- Thermal throttling (nếu có)
+**Phân tích kết quả:**
 
-**Kết quả mong đợi:**
-```
-Success Rate: > 95%
-Average E2E Time: 2000-3000ms
-Average Inference: 80-150ms
-Throughput: 0.3-0.5 FPS (E2E)
-GPU Utilization: 75-85%
-CPU Temperature: 50-65°C
-GPU Temperature: 45-60°C
-Power Consumption: 4-6W
-```
+**Bảng 1: Timing Breakdown (Trung bình)**
 
-**Thời gian:** 20-30 phút
+| Giai Đoạn | Thời Gian (ms) | Tỷ Lệ (%) | Mô Tả |
+|-----------|----------------|-----------|-------|
+| Upload lên Firebase | _________ | _____ | Upload ảnh lên cloud storage |
+| Download từ Firebase | _________ | _____ | Download ảnh từ cloud storage |
+| Load ảnh | _________ | _____ | Đọc ảnh vào memory |
+| Tiền xử lý | _________ | _____ | Resize 224x224, normalize [0,1] |
+| AI Inference | _________ | _____ | Chạy mô hình trên GPU |
+| Hậu xử lý | _________ | _____ | Softmax, parse kết quả |
+| **Tổng cộng** | **_________** | **100%** | **End-to-end latency** |
 
----
+**Bảng 2: Statistical Analysis**
 
-### Test Case 4: Kiểm Thử Đầy Đủ (Full Batch Test)
+| Giai Đoạn | Min (ms) | Max (ms) | Mean (ms) | Std Dev (ms) |
+|-----------|----------|----------|-----------|--------------|
+| Upload | _____ | _____ | _____ | _____ |
+| Download | _____ | _____ | _____ | _____ |
+| Inference | _____ | _____ | _____ | _____ |
+| Total E2E | _____ | _____ | _____ | _____ |
+
+**Bảng 3: System Resources**
+
+| Metric | Min | Max | Mean | Unit |
+|--------|-----|-----|------|------|
+| CPU Usage | _____ | _____ | _____ | % |
+| Memory Usage | _____ | _____ | _____ | % |
+| GPU Usage | _____ | _____ | _____ | % |
+| GPU Frequency | _____ | _____ | _____ | MHz |
+| CPU Temperature | _____ | _____ | _____ | °C |
+| GPU Temperature | _____ | _____ | _____ | °C |
+| Power Consumption | _____ | _____ | _____ | W |
+
+**Thời gian thực hiện:** 20-30 phút
+
+**Tiêu chí đánh giá:**
+- ✅ Pass: Đạt tất cả tiêu chí mục tiêu
+- ⚠️ Warning: Đạt tiêu chí chấp nhận được
+- ❌ Fail: Không đạt tiêu chí tối thiểu
+
+
+### 4.4. Kịch Bản 4: Kiểm Thử Quy Mô Lớn (Large Batch Test)
 
 **Mục đích:** Đánh giá toàn diện với 100 ảnh
 
+**Điều kiện tiên quyết:**
+- Kịch bản 3 đã pass
+- Đủ dung lượng lưu trữ cho log files
+- Kết nối mạng ổn định
+
 **Các bước thực hiện:**
 
 ```bash
-# Chạy test 100 ảnh
-python3 run_complete_test.py --folder ./test_images --max 100
+# Xóa log cũ
+rm -f complete_test_results.*
 
-# Hoặc test tất cả 264 ảnh
-python3 run_complete_test.py --folder ./test_images --max 264
+# Chạy test 100 ảnh
+python3 run_complete_test.py --folder ./test_images --max 100 2>&1 | tee test_100_images.log
+
+# Sau khi hoàn thành, phân tích kết quả
+python3 analyze_results.py complete_test_results.json
 ```
 
-**Metrics cần thu thập:**
+**Phân tích chi tiết:**
 
-1. **Timing Metrics:**
-   - Upload time (ms)
-   - Download time (ms)
-   - Load time (ms)
-   - Preprocessing time (ms)
-   - Inference time (ms)
-   - Postprocessing time (ms)
-   - Total E2E time (ms)
+**1. Bottleneck Analysis**
 
-2. **System Metrics:**
-   - CPU usage (%)
-   - Memory usage (%)
-   - GPU usage (%)
-   - GPU frequency (MHz)
-   - CPU temperature (°C)
-   - GPU temperature (°C)
-   - Power consumption (W)
+Xác định giai đoạn chiếm thời gian nhiều nhất:
 
-3. **Performance Metrics:**
-   - Success rate (%)
-   - Throughput (FPS)
-   - Average latency (ms)
-   - P50, P95, P99 latency (ms)
+```
+Nếu t_download > 50% của t_e2e:
+    → Bottleneck: Network download
+    → Giải pháp: Tối ưu băng thông, cache, CDN
+
+Nếu t_upload > 30% của t_e2e:
+    → Bottleneck: Network upload  
+    → Giải pháp: Compress ảnh, tối ưu băng thông
+
+Nếu t_inference > 20% của t_e2e:
+    → Bottleneck: AI processing
+    → Giải pháp: Tối ưu model, quantization
+```
+
+**2. Performance Trend Analysis**
+
+Vẽ biểu đồ thời gian xử lý theo số thứ tự ảnh:
+
+```
+Nếu thời gian tăng dần:
+    → Có thể có memory leak hoặc thermal throttling
+    
+Nếu thời gian ổn định:
+    → Hệ thống hoạt động tốt
+    
+Nếu thời gian giảm dần:
+    → Có thể do cache warming up
+```
+
+**3. Resource Utilization**
+
+```
+GPU Usage:
+- < 70%: Underutilized, có thể tăng batch size
+- 70-90%: Optimal
+- > 90%: Có thể bị bottleneck
+
+Temperature:
+- < 60°C: Excellent
+- 60-70°C: Good
+- > 70°C: Risk of throttling
+```
 
 **Kết quả mong đợi:**
 
 ```
-================================================================================
-PERFORMANCE REPORT - JETSON NANO
-================================================================================
-
-📊 Summary:
-   Total Inferences: 100
-   Total Time: 250.00s
-   Average Time: 2500.00ms
-   Min Time: 2000.00ms
-   Max Time: 3500.00ms
-   Throughput: 0.4 FPS
-
-📈 Stage Breakdown (Average):
-
-┌─────────────────────────────────────────┬──────────────┬──────────┬────────────────────────────────────┐
-│ Giai đoạn                               │ Thời gian    │ Tỷ lệ    │ Mô tả                              │
-├─────────────────────────────────────────┼──────────────┼──────────┼────────────────────────────────────┤
-│ Upload lên Firebase Storage             │    500.00ms  │   20.0%  │ Upload ảnh lên cloud storage       │
-│ Download từ Firebase Storage            │    750.00ms  │   30.0%  │ Download ảnh từ cloud storage      │
-│ Load ảnh                                │     45.00ms  │    1.8%  │ Đọc ảnh từ file                    │
-│ Tiền xử lý ảnh                          │     15.00ms  │    0.6%  │ Resize 224x224, normalize [0,1]    │
-│ AI Inference (TensorRT)                 │    110.00ms  │    4.4%  │ Chạy mô hình trên GPU              │
-│ Hậu xử lý & tạo JSON                    │      2.00ms  │    0.1%  │ Softmax, parse kết quả             │
-│ Chờ xử lý                               │   1078.00ms  │   43.1%  │ Thời gian chờ và overhead          │
-├─────────────────────────────────────────┼──────────────┼──────────┼────────────────────────────────────┤
-│ Tổng cộng                               │   2500.00ms  │    100%  │ End-to-end latency                 │
-└─────────────────────────────────────────┴──────────────┴──────────┴────────────────────────────────────┘
-
-🖥️  System Metrics (Average):
-   CPU Usage: 50.0%
-   Memory Usage: 65.0% (2516 MB)
-
-🎮 Jetson Metrics:
-   GPU Usage: 80.0%
-   GPU Frequency: 921 MHz
-   CPU Temperature: 55.0°C
-   GPU Temperature: 52.0°C
-   Power Consumption: 5.0W
-
-📈 STATISTICAL ANALYSIS
-────────────────────────────────────────────────────────────────────────────────
-
-Upload lên Firebase Storage:
-  • Average: 500.00ms
-  • Min: 350.00ms
-  • Max: 800.00ms
-  • Std Dev: 80.00ms
-
-Download từ Firebase Storage:
-  • Average: 750.00ms
-  • Min: 500.00ms
-  • Max: 1200.00ms
-  • Std Dev: 120.00ms
-
-AI Inference (TensorRT):
-  • Average: 110.00ms
-  • Min: 80.00ms
-  • Max: 180.00ms
-  • Std Dev: 15.00ms
-
-================================================================================
-📊 FINAL SUMMARY
-================================================================================
-✅ Successful: 100/100
-❌ Failed: 0/100
-📈 Success Rate: 100.0%
-================================================================================
+Success Rate: ≥ 95%
+Average E2E Time: 2000-3000ms
+Average Inference: 80-150ms
+Throughput (E2E): 0.3-0.5 FPS
+Throughput (Jetson only): 8-12 FPS
+GPU Utilization: 75-85%
+CPU Temperature: < 65°C
+GPU Temperature: < 60°C
+Power Consumption: 4-6W
+No thermal throttling
+No memory leaks
 ```
 
-**Thời gian:** 40-60 phút
+**Thời gian thực hiện:** 40-60 phút
 
----
 
-### Test Case 5: Kiểm Thử Stress (Stress Test)
+### 4.5. Kịch Bản 5: Kiểm Thử Stress (Stress Test)
 
-**Mục đích:** Đánh giá giới hạn và độ ổn định của hệ thống
+**Mục đích:** Đánh giá giới hạn và độ bền của hệ thống
+
+**Điều kiện tiên quyết:**
+- Tất cả kịch bản trước đã pass
+- Có đủ thời gian (2-3 giờ)
+- Giám sát liên tục
 
 **Các bước thực hiện:**
 
 ```bash
-# Test tất cả 264 ảnh liên tục
+# Test tất cả 264 ảnh
 python3 run_complete_test.py --folder ./test_images --max 264
 
-# Hoặc chạy nhiều lần
+# Hoặc test lặp lại nhiều lần
 for i in {1..3}; do
-    echo "Run $i/3"
+    echo "=== Run $i/3 ==="
     python3 run_complete_test.py --folder ./test_images --max 100
-    sleep 60  # Nghỉ 1 phút giữa các lần
+    echo "Waiting 60s for cooldown..."
+    sleep 60
 done
 ```
 
 **Metrics cần quan sát:**
-- Thermal throttling
-- Memory leaks
-- Performance degradation over time
-- Error rate increase
+
+1. **Thermal Behavior:**
+   - Nhiệt độ có tăng liên tục không?
+   - Có xảy ra thermal throttling không?
+   - Thời gian để nhiệt độ ổn định?
+
+2. **Memory Behavior:**
+   - Memory usage có tăng dần không?
+   - Có memory leak không?
+   - Garbage collection hoạt động tốt không?
+
+3. **Performance Degradation:**
+   - Thời gian xử lý có tăng theo thời gian không?
+   - Throughput có giảm không?
+   - Error rate có tăng không?
 
 **Kết quả mong đợi:**
-```
-Success Rate: > 95%
-No thermal throttling
-No memory leaks
-Consistent performance
-Temperature: < 70°C
-```
+- Success rate: ≥ 95% trong suốt quá trình
+- Không có thermal throttling
+- Không có memory leak
+- Performance ổn định
+- Nhiệt độ < 70°C
+- Hệ thống không crash
 
-**Thời gian:** 2-3 giờ
+**Thời gian thực hiện:** 2-3 giờ
 
----
+**Tiêu chí đánh giá:**
+- ✅ Pass: Hệ thống hoạt động ổn định, không có degradation
+- ⚠️ Warning: Có thermal throttling nhẹ hoặc performance giảm < 10%
+- ❌ Fail: Hệ thống crash, memory leak, hoặc performance giảm > 20%
 
-## Phân Tích Kết Quả
-
-### 1. Timing Analysis
-
-**Mục tiêu:**
-- Upload time: < 600ms
-- Download time: < 1000ms
-- Inference time: < 200ms
-- Total E2E: < 3000ms
-
-**Công thức tính:**
-```
-Total E2E = Upload + Request + Processing + Parse
-Processing = Download + Load + Preprocess + Inference + Postprocess
-```
-
-**Bottleneck Identification:**
-```python
-# Tính tỷ lệ từng giai đoạn
-upload_pct = (upload_time / total_time) * 100
-download_pct = (download_time / total_time) * 100
-inference_pct = (inference_time / total_time) * 100
-
-# Xác định bottleneck
-if download_pct > 50:
-    print("Bottleneck: Network download")
-elif upload_pct > 30:
-    print("Bottleneck: Network upload")
-elif inference_pct > 20:
-    print("Bottleneck: AI inference")
-```
-
-### 2. System Resource Analysis
-
-**CPU Usage:**
-- Idle: 10-20%
-- During inference: 40-60%
-- Peak: < 80%
-
-**GPU Usage:**
-- Idle: 0-5%
-- During inference: 70-90%
-- Peak: < 95%
-
-**Memory Usage:**
-- Baseline: 1.5-2.0 GB
-- During inference: 2.0-2.5 GB
-- Peak: < 3.5 GB
-
-**Temperature:**
-- Idle: 35-45°C
-- During inference: 50-65°C
-- Critical: > 70°C (thermal throttling)
-
-**Power:**
-- Idle: 2-3W
-- During inference: 4-6W
-- Peak: < 10W
-
-### 3. Performance Metrics
-
-**Throughput:**
-```
-Jetson Only (no network): ~10 FPS (100ms/image)
-End-to-End (with network): ~0.4 FPS (2500ms/image)
-```
-
-**Latency Percentiles:**
-```
-P50 (Median): 2400ms
-P95: 3000ms
-P99: 3500ms
-```
-
-**Success Rate:**
-```
-Target: > 95%
-Acceptable: > 90%
-Critical: < 85%
-```
 
 ---
 
-## File Kết Quả
+## PHẦN V: PHÂN TÍCH KẾT QUẢ
 
-### 1. complete_test_results.json
-```json
-{
-  "test_info": {
-    "date": "2024-12-04",
-    "total_images": 100,
-    "success": 100,
-    "failed": 0,
-    "success_rate": 100.0
-  },
-  "metrics": [
-    {
-      "timestamp": "2024-12-04T10:30:45",
-      "image": "brown_val (1).jpg",
-      "class": "Brown_Spot",
-      "confidence": 0.9567,
-      "timing": {
-        "upload_ms": 511.35,
-        "download_ms": 769.10,
-        "preprocessing_ms": 2.58,
-        "inference_ms": 114.65,
-        "postprocessing_ms": 0.06,
-        "total_e2e_ms": 2474.47
-      },
-      "system": {
-        "cpu_percent": 48.7,
-        "gpu_percent": 82.3,
-        "cpu_temp": 52.3,
-        "gpu_temp": 49.7,
-        "power": 5.12
-      }
-    }
-  ]
-}
+### 5.1. Mẫu Báo Cáo Kết Quả
+
+**Bảng 4: Kết Quả Tổng Hợp Các Kịch Bản**
+
+| Kịch Bản | Số Ảnh | Success Rate | Avg Time (ms) | Avg Inference (ms) | Throughput (FPS) | Kết Quả |
+|----------|--------|--------------|---------------|-------------------|------------------|---------|
+| KB1: Đơn lẻ | 1 | _____ % | _____ | _____ | _____ | ☐ Pass ☐ Fail |
+| KB2: Nhỏ | 10 | _____ % | _____ | _____ | _____ | ☐ Pass ☐ Fail |
+| KB3: Trung bình | 50 | _____ % | _____ | _____ | _____ | ☐ Pass ☐ Fail |
+| KB4: Lớn | 100 | _____ % | _____ | _____ | _____ | ☐ Pass ☐ Fail |
+| KB5: Stress | 264 | _____ % | _____ | _____ | _____ | ☐ Pass ☐ Fail |
+
+### 5.2. Phân Tích Timing Breakdown
+
+**Bảng 5: Phân Tích Chi Tiết Thời Gian Xử Lý (Kịch Bản 4 - 100 ảnh)**
+
+| Giai Đoạn | Min (ms) | Max (ms) | Mean (ms) | Std Dev | Tỷ Lệ (%) | Đánh Giá |
+|-----------|----------|----------|-----------|---------|-----------|----------|
+| Upload | _____ | _____ | _____ | _____ | _____ | ☐ Tốt ☐ TB ☐ Kém |
+| Download | _____ | _____ | _____ | _____ | _____ | ☐ Tốt ☐ TB ☐ Kém |
+| Load | _____ | _____ | _____ | _____ | _____ | ☐ Tốt ☐ TB ☐ Kém |
+| Preprocess | _____ | _____ | _____ | _____ | _____ | ☐ Tốt ☐ TB ☐ Kém |
+| Inference | _____ | _____ | _____ | _____ | _____ | ☐ Tốt ☐ TB ☐ Kém |
+| Postprocess | _____ | _____ | _____ | _____ | _____ | ☐ Tốt ☐ TB ☐ Kém |
+| **Total E2E** | **_____** | **_____** | **_____** | **_____** | **100%** | **☐ Tốt ☐ TB ☐ Kém** |
+
+**Tiêu chí đánh giá:**
+- Tốt: Đạt mục tiêu
+- TB (Trung bình): Chấp nhận được
+- Kém: Không đạt
+
+### 5.3. Phân Tích Tài Nguyên Hệ Thống
+
+**Bảng 6: Sử Dụng Tài Nguyên (Kịch Bản 4 - 100 ảnh)**
+
+| Tài Nguyên | Min | Max | Mean | Mục Tiêu | Đạt/Không |
+|------------|-----|-----|------|----------|-----------|
+| CPU Usage (%) | _____ | _____ | _____ | 40-60% | ☐ Đạt ☐ Không |
+| Memory Usage (%) | _____ | _____ | _____ | < 80% | ☐ Đạt ☐ Không |
+| GPU Usage (%) | _____ | _____ | _____ | 75-85% | ☐ Đạt ☐ Không |
+| GPU Freq (MHz) | _____ | _____ | _____ | 921 | ☐ Đạt ☐ Không |
+| CPU Temp (°C) | _____ | _____ | _____ | < 60 | ☐ Đạt ☐ Không |
+| GPU Temp (°C) | _____ | _____ | _____ | < 60 | ☐ Đạt ☐ Không |
+| Power (W) | _____ | _____ | _____ | 4-6 | ☐ Đạt ☐ Không |
+
+### 5.4. Xác Định Bottleneck
+
+**Phân tích bottleneck dựa trên tỷ lệ thời gian:**
+
+```
+Bottleneck chính: _________________ (_____ %)
+
+Nguyên nhân:
+☐ Network latency (Upload/Download)
+☐ AI inference
+☐ Preprocessing
+☐ System resources
+☐ Khác: _________________
+
+Đề xuất giải pháp:
+1. _________________________________
+2. _________________________________
+3. _________________________________
 ```
 
-### 2. complete_test_results.csv
-```csv
-Timestamp,Image,Class,Confidence,Upload,Download,Preproc,Inference,Postproc,Total,CPU%,GPU%,Temp
-2024-12-04T10:30:45,brown_val (1).jpg,Brown_Spot,0.9567,511.35,769.10,2.58,114.65,0.06,2474.47,48.7,82.3,52.3
-...
+
+---
+
+## PHẦN VI: KẾT LUẬN VÀ KHUYẾN NGHỊ
+
+### 6.1. Tổng Kết Kết Quả
+
+**Đánh giá tổng quan:**
+
+```
+Tổng số kịch bản: 5
+Số kịch bản Pass: _____ / 5
+Số kịch bản Fail: _____ / 5
+
+Kết luận chung:
+☐ Hệ thống đạt yêu cầu, sẵn sàng triển khai
+☐ Hệ thống cần cải thiện một số điểm
+☐ Hệ thống chưa đạt yêu cầu, cần tối ưu lại
 ```
 
-### 3. test_summary_report.txt
+### 6.2. Điểm Mạnh
+
 ```
-Báo cáo tổng hợp với bảng timing breakdown và statistical analysis
+1. _________________________________
+2. _________________________________
+3. _________________________________
+```
+
+### 6.3. Điểm Cần Cải Thiện
+
+```
+1. _________________________________
+   Mức độ: ☐ Cao ☐ Trung bình ☐ Thấp
+   
+2. _________________________________
+   Mức độ: ☐ Cao ☐ Trung bình ☐ Thấp
+   
+3. _________________________________
+   Mức độ: ☐ Cao ☐ Trung bình ☐ Thấp
+```
+
+### 6.4. Khuyến Nghị Tối Ưu
+
+**Tối ưu ngắn hạn (1-2 tuần):**
+1. _________________________________
+2. _________________________________
+3. _________________________________
+
+**Tối ưu trung hạn (1-2 tháng):**
+1. _________________________________
+2. _________________________________
+3. _________________________________
+
+**Tối ưu dài hạn (3-6 tháng):**
+1. _________________________________
+2. _________________________________
+3. _________________________________
+
+### 6.5. So Sánh Với Các Nghiên Cứu Liên Quan
+
+**Bảng 7: So Sánh Hiệu Năng**
+
+| Nghiên Cứu | Platform | Inference Time | Throughput | Accuracy |
+|------------|----------|----------------|------------|----------|
+| Hệ thống này | Jetson Nano | _____ ms | _____ FPS | _____ % |
+| Nghiên cứu A | Jetson Xavier | 50 ms | 20 FPS | 95% |
+| Nghiên cứu B | Raspberry Pi 4 | 300 ms | 3 FPS | 92% |
+| Nghiên cứu C | Cloud GPU | 30 ms | 33 FPS | 97% |
+
+**Nhận xét:**
+```
+_________________________________
+_________________________________
+_________________________________
 ```
 
 ---
 
-## Đánh Giá và Kết Luận
+## PHẦN VII: PHỤ LỤC
 
-### Tiêu Chí Đánh Giá
+### 7.1. Danh Sách Lệnh Hữu Ích
 
-| Metric | Target | Good | Acceptable | Poor |
-|--------|--------|------|------------|------|
-| Inference Time | < 150ms | < 120ms | 120-200ms | > 200ms |
-| Total E2E Time | < 3000ms | < 2500ms | 2500-3500ms | > 3500ms |
-| Success Rate | 100% | > 98% | 95-98% | < 95% |
-| GPU Usage | 80-90% | 75-85% | 70-90% | < 70% or > 95% |
-| Temperature | < 60°C | < 55°C | 55-65°C | > 65°C |
-| Throughput (E2E) | > 0.5 FPS | > 0.4 FPS | 0.3-0.4 FPS | < 0.3 FPS |
-
-### Phân Tích Bottleneck
-
-**Network Bottleneck (Phổ biến nhất):**
-```
-Download: 750ms (30%)
-Upload: 500ms (20%)
-Total Network: 1250ms (50% của E2E)
-
-Giải pháp:
-- Sử dụng Firebase region gần hơn
-- Tăng băng thông mạng
-- Compress ảnh trước khi upload
-- Cache ảnh đã xử lý
-```
-
-**AI Inference Bottleneck:**
-```
-Inference: 110ms (4.4%)
-
-Đánh giá: ✅ Tốt (< 200ms target)
-Không cần tối ưu thêm
-```
-
-**System Resource:**
-```
-GPU: 80% (✅ Tốt)
-CPU: 50% (✅ Tốt)
-Memory: 65% (✅ Tốt)
-Temperature: 55°C (✅ Tốt)
-Power: 5W (✅ Tốt)
-```
-
-### Kết Luận
-
-**Điểm Mạnh:**
-- ✅ AI inference rất nhanh (110ms)
-- ✅ GPU utilization tốt (80%)
-- ✅ Nhiệt độ ổn định (< 60°C)
-- ✅ Success rate cao (100%)
-- ✅ Không có memory leak
-
-**Điểm Cần Cải Thiện:**
-- ⚠️ Network latency cao (50% tổng thời gian)
-- ⚠️ Throughput E2E thấp (0.4 FPS)
-
-**Khuyến Nghị:**
-1. Tối ưu network (Firebase region, băng thông)
-2. Xem xét edge processing (giảm upload/download)
-3. Batch processing nếu có thể
-4. Caching cho ảnh đã xử lý
-
----
-
-## Phụ Lục
-
-### A. Lệnh Hữu Ích
-
+**Giám sát hệ thống:**
 ```bash
-# Kiểm tra GPU
+# Xem GPU/CPU real-time
 jtop
 
-# Kiểm tra nhiệt độ
+# Xem nhiệt độ
 cat /sys/devices/virtual/thermal/thermal_zone*/temp
 
-# Kiểm tra power mode
+# Xem power mode
 sudo nvpmodel -q
 
 # Set max performance
 sudo jetson_clocks
 
-# Kiểm tra network
+# Enable fan
+sudo jetson_clocks --fan
+```
+
+**Kiểm tra kết nối:**
+```bash
+# Test network
 ping -c 10 firebasestorage.googleapis.com
+
+# Test bandwidth
 speedtest-cli
 
-# Xem log real-time
-tail -f complete_test_results.json
+# Check Firebase connection
+python3 -c "from firebase_uploader import init_firebase; init_firebase()"
+```
 
-# Export CSV sang Excel
+**Phân tích kết quả:**
+```bash
+# View JSON
+cat complete_test_results.json | python3 -m json.tool | less
+
+# View CSV
+column -t -s, complete_test_results.csv | less
+
+# Export to Excel
 libreoffice complete_test_results.csv
 ```
 
-### B. Troubleshooting
+### 7.2. Troubleshooting
 
-**Lỗi: Timeout**
-```bash
-# Tăng timeout
-python3 run_complete_test.py --folder ./test_images --max 100 --timeout 60
+**Vấn đề 1: Timeout khi xử lý**
+```
+Nguyên nhân: Network chậm hoặc Jetson quá tải
+Giải pháp:
+1. Tăng timeout: --timeout 60
+2. Kiểm tra network: ping, speedtest
+3. Giảm số ảnh test: --max 50
 ```
 
-**Lỗi: Out of Memory**
-```bash
-# Giảm số ảnh test
-python3 run_complete_test.py --folder ./test_images --max 50
-
-# Hoặc restart Jetson
-sudo reboot
+**Vấn đề 2: Out of Memory**
+```
+Nguyên nhân: Memory leak hoặc batch size quá lớn
+Giải pháp:
+1. Restart Jetson: sudo reboot
+2. Giảm số ảnh: --max 50
+3. Clear cache: sync; echo 3 > /proc/sys/vm/drop_caches
 ```
 
-**Lỗi: High Temperature**
-```bash
-# Enable fan
-sudo jetson_clocks --fan
-
-# Reduce power mode
-sudo nvpmodel -m 1  # 5W mode
+**Vấn đề 3: Nhiệt độ cao (> 70°C)**
+```
+Nguyên nhân: Tản nhiệt không đủ
+Giải pháp:
+1. Enable fan: sudo jetson_clocks --fan
+2. Giảm power mode: sudo nvpmodel -m 1
+3. Thêm tản nhiệt
+4. Cải thiện thông gió
 ```
 
-### C. Tài Liệu Tham Khảo
+**Vấn đề 4: GPU utilization thấp (< 70%)**
+```
+Nguyên nhân: Bottleneck ở CPU hoặc I/O
+Giải pháp:
+1. Kiểm tra CPU usage
+2. Tối ưu preprocessing
+3. Sử dụng batch processing
+```
 
-- [JETSON_MONITORING_GUIDE.md](./web/JETSON_MONITORING_GUIDE.md)
-- [QUICK_START.md](./web/QUICK_START.md)
-- [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
-- [MONITORING_SUMMARY.md](./MONITORING_SUMMARY.md)
+### 7.3. Checklist Trước Khi Test
+
+```
+☐ Jetson Nano đã được cấu hình đầy đủ
+☐ Kết nối mạng ổn định (ping < 50ms)
+☐ Firebase đã được khởi tạo
+☐ Có đủ dung lượng lưu trữ (> 1GB free)
+☐ Nhiệt độ ban đầu < 50°C
+☐ Power mode đã được set (nvpmodel -m 0)
+☐ Jetson clocks đã được enable
+☐ Có đủ ảnh test trong thư mục
+☐ Đã backup dữ liệu quan trọng
+☐ Có đủ thời gian để chạy test
+```
+
+### 7.4. Tài Liệu Tham Khảo
+
+1. JETSON_MONITORING_GUIDE.md - Hướng dẫn chi tiết monitoring
+2. QUICK_START.md - Hướng dẫn nhanh
+3. DEPLOYMENT_CHECKLIST.md - Checklist triển khai
+4. MONITORING_SUMMARY.md - Tổng quan monitoring
+5. TEST_SCENARIO_DETAILED.md - Kịch bản test chi tiết
 
 ---
 
-**Người thực hiện:** _________________
+## PHẦN VIII: PHIẾU GHI NHẬN KẾT QUẢ
 
-**Ngày thực hiện:** _________________
+**Thông tin chung:**
+```
+Người thực hiện: _______________________
+Ngày thực hiện: _______________________
+Thời gian bắt đầu: _______________________
+Thời gian kết thúc: _______________________
+Tổng thời gian: _______________________
+```
 
-**Kết quả:** ☐ Pass  ☐ Fail  ☐ Need Review
+**Kết quả tổng hợp:**
+```
+Kịch bản 1 (1 ảnh):     ☐ Pass  ☐ Fail
+Kịch bản 2 (10 ảnh):    ☐ Pass  ☐ Fail
+Kịch bản 3 (50 ảnh):    ☐ Pass  ☐ Fail
+Kịch bản 4 (100 ảnh):   ☐ Pass  ☐ Fail
+Kịch bản 5 (264 ảnh):   ☐ Pass  ☐ Fail
 
-**Ghi chú:** _________________
+Tổng kết: ☐ Pass  ☐ Fail  ☐ Cần xem xét
+```
+
+**Ghi chú:**
+```
+_________________________________
+_________________________________
+_________________________________
+_________________________________
+```
+
+**Chữ ký xác nhận:**
+```
+Người thực hiện: _______________________
+
+Người kiểm tra: _______________________
+
+Ngày: _______________________
+```
+
+---
+
+**HẾT**
